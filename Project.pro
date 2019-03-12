@@ -35,6 +35,7 @@ INCLUDEPATH += \
     $$PWD/include \
     $$PWD/ui \
     $$PWD/materials \
+    /public/devel/2018/include \
     ${FILAMENT_PATH}/include 
 
 HEADERS += $$files(include/*.h, true)
@@ -42,6 +43,7 @@ SOURCES += $$files(src/*.cpp, true)
 
 FORMS += ui/applayout.ui
 
+LIBS += -lOpenImageIO
 LIBS += -L${FILAMENT_PATH}/lib/x86_64
 LIBS += \
   -lfilament \
@@ -50,7 +52,8 @@ LIBS += \
   -lfilabridge \
   -lfilaflat \
   -lutils \
-  -lgeometry \
+  -limage \
+#  -lgeometry \
   -lsmol-v \
   -lassimp \
   -lfilameshio \
