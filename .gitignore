@@ -1,0 +1,7 @@
+build
+.qmake*
+Makefile
+ui/*.h
+assets/materials/*.inc
+assets/materials/*.filamat
+assets/models/*.filamesh
