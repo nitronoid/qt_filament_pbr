@@ -181,7 +181,7 @@ public:
   {
     auto& cs = m_camera_state;
     // Extend or contract the camera arm
-    cs.camera_arm_length += (cs.mouse_position.y - i_new_mouse_position.y) * cs.sensitivity;
+    cs.arm_length += (cs.mouse_position.y - i_new_mouse_position.y) * cs.sensitivity;
     // Store the new mouse position
     cs.mouse_position = std::move(i_new_mouse_position);
     // Recalculate the camera's view matrix
@@ -210,7 +210,7 @@ public:
     // We use Y as the up direction
     constexpr flm::float3 up(0.f, 1.f, 0.f);
     // Calculate the camera arm
-    auto arm = cs.camera_arm_direction * cs.camera_arm_length;
+    auto arm = cs.arm_direction * cs.arm_length;
     // Calculate the new position by rotating the camera origin position vector
     auto eye = cs.target - (cs.rotation * (cs.target - arm));
     // Recalculate the view matrix
@@ -360,8 +360,8 @@ private:
   struct TrackballCameraState
   {
     filament::math::quatf rotation{0.f, 0.f, 0.f, 1.f};
-    filament::math::float3 camera_arm_direction{0.f, 0.f, 1.f};
-    float camera_arm_length = 4.f;
+    const filament::math::float3 arm_direction{0.f, 0.f, 1.f};
+    float arm_length = 4.f;
     filament::math::float3 target{0.f};
     filament::math::float2 spherical_position{0.f};
     filament::math::float2 mouse_position{0.f};
