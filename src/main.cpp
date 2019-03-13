@@ -164,32 +164,71 @@ public:
     return {a.y * b.y, a.y * b.x, a.x * b.y, -(a.x) * b.x};
   }
 
-  virtual void mouseMoveEvent(QMouseEvent* i_mouse_event) override
+  virtual void mousePressEvent(QMouseEvent* i_mouse_event) override
   {
-    static flm::float2 spherical_position(0.f);
-    static flm::float2 mouse_position(0.f);
-    static float sensitivity = 0.01f;
-    static float radius = 4.f;
-    const flm::float3 camera_origin(0.f, 0.f, radius);
-    const flm::float3 target(0.f);
+    QWidget::mousePressEvent(i_mouse_event);
+    switch (i_mouse_event->button())
+    {
+      case Qt::LeftButton: m_camera_state.behaviour = TrackballCameraState::ORBIT; break;
+      case Qt::RightButton: m_camera_state.behaviour = TrackballCameraState::ZOOM; break;
+      default: break;
+    };
+    m_camera_state.mouse_position.x = i_mouse_event->x();
+    m_camera_state.mouse_position.y = i_mouse_event->y();
+  }
 
-    // Get the new mouse position
-    flm::float2 new_mouse_position(i_mouse_event->x(), i_mouse_event->y());
+  void zoom_camera(filament::math::float2 i_new_mouse_position) 
+  {
+    auto& cs = m_camera_state;
+    // Extend or contract the camera arm
+    cs.camera_arm_length += (cs.mouse_position.y - i_new_mouse_position.y) * cs.sensitivity;
+    // Store the new mouse position
+    cs.mouse_position = std::move(i_new_mouse_position);
+    // Recalculate the camera's view matrix
+    calculate_camera_view();
+  }
+
+  void orbit_camera(filament::math::float2 i_new_mouse_position) 
+  {
+    auto& cs = m_camera_state;
     // Calculate the new spherical coordinate of the camera, from the mouse
     // velocity vector, the current position and a damping factor
-    spherical_position = trackball_coordinate(
-      spherical_position, mouse_position - new_mouse_position, sensitivity);
+    cs.spherical_position = trackball_coordinate(
+      cs.spherical_position, cs.mouse_position - i_new_mouse_position, cs.sensitivity);
     // Store the new mouse position
-    mouse_position = std::move(new_mouse_position);
-    // We use Y as the up direction
-    constexpr flm::float3 up(0.f, 1.f, 0.f);
+    cs.mouse_position = std::move(i_new_mouse_position);
     // Calculate the rotation from our cameras origin, around the target to the
     // new position
-    auto rotation = fast_trackball_rotation(spherical_position);
+    cs.rotation = fast_trackball_rotation(cs.spherical_position);
+    // Recalculate the camera's view matrix
+    calculate_camera_view();
+  }
+
+  void calculate_camera_view()
+  {
+    const auto& cs = m_camera_state;
+    // We use Y as the up direction
+    constexpr flm::float3 up(0.f, 1.f, 0.f);
+    // Calculate the camera arm
+    auto arm = cs.camera_arm_direction * cs.camera_arm_length;
     // Calculate the new position by rotating the camera origin position vector
-    auto eye = target - (rotation * (target - camera_origin));
+    auto eye = cs.target - (cs.rotation * (cs.target - arm));
     // Recalculate the view matrix
-    m_camera->lookAt(eye, target, up);
+    m_camera->lookAt(eye, m_camera_state.target, up);
+  }
+
+  virtual void mouseMoveEvent(QMouseEvent* i_mouse_event) override
+  {
+    QWidget::mouseMoveEvent(i_mouse_event);
+    // Get the new mouse position
+    flm::float2 new_mouse_position(i_mouse_event->x(), i_mouse_event->y());
+    switch(m_camera_state.behaviour)
+    {
+      case TrackballCameraState::ORBIT: orbit_camera(new_mouse_position); break;
+      case TrackballCameraState::ZOOM:  zoom_camera(new_mouse_position); break;
+      case TrackballCameraState::PAN: break;
+      default: break;
+    };
     // Redraw the scene now that we've moved the camera
     request_draw();
   }
@@ -205,8 +244,9 @@ private:
     m_view->setCamera(m_camera.get());
     m_view->setScene(m_scene.get());
 
+    // Calculate the camera's view matrix
+    calculate_camera_view();
     // Set up the render view point
-    setup_camera_view();
     setup_camera_projection();
 
     // Screen space effects
@@ -249,15 +289,6 @@ private:
       .build(*m_engine, m_light);
     // Add the light to the scene
     m_scene->addEntity(m_light);
-  }
-
-  void setup_camera_view()
-  {
-    // setup view matrix
-    const flm::float3 eye(0.f, 0.f, 4.f);
-    const flm::float3 target(0.f);
-    const flm::float3 up(0.f, 1.f, 0.f);
-    m_camera->lookAt(eye, target, up);
   }
 
   void setup_camera_projection()
@@ -325,6 +356,20 @@ private:
   FilamentScopedEntity m_light;
   FilamentScopedEntity m_mesh;
   filamesh::MeshReader::MaterialRegistry m_material_registry;
+
+  struct TrackballCameraState
+  {
+    filament::math::quatf rotation{0.f, 0.f, 0.f, 1.f};
+    filament::math::float3 camera_arm_direction{0.f, 0.f, 1.f};
+    float camera_arm_length = 4.f;
+    filament::math::float3 target{0.f};
+    filament::math::float2 spherical_position{0.f};
+    filament::math::float2 mouse_position{0.f};
+    float sensitivity = 0.005f;
+    enum BEHAVIOUR { ORBIT, ZOOM, PAN,  NUM_BEHAVIOURS};
+    BEHAVIOUR behaviour;
+  };
+  TrackballCameraState m_camera_state;
 
   struct IBL
   {

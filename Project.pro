@@ -53,7 +53,7 @@ LIBS += \
   -lfilaflat \
   -lutils \
   -limage \
-  -lgeometry \
+#  -lgeometry \
   -lsmol-v \
   -lassimp \
   -lfilameshio \
