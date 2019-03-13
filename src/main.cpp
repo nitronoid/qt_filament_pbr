@@ -1,7 +1,10 @@
 #include <fstream>
+#include <array>
+#include <sstream>
 
 #include <QApplication>
 #include <QSurfaceFormat>
+#include <QMouseEvent>
 
 #include <filament/Material.h>
 #include <filament/MaterialInstance.h>
@@ -13,16 +16,14 @@
 #include <filameshio/MeshReader.h>
 #include <filament/Skybox.h>
 #include <filament/IndirectLight.h>
+#include <math/fast.h>
 
 #include <image/KtxBundle.h>
 #include <image/KtxUtility.h>
 
-#include <OpenImageIO/imageio.h>
-
 #include "app_window.h"
 #include "native_window_widget.h"
 #include "filament_raii.h"
-#include "filament_cube.h"
 
 // To reduce the verbosity of filament code
 namespace fl = filament;
@@ -37,7 +38,8 @@ static constexpr uint8_t TRANSPARENTCOLOR_PACKAGE[] = {
 #include "assets/materials/transparentColor.inc"
 };
 
-//filament::Texture* load_texture(filament::Engine* io_engine, const utils::Path& i_texture_path)
+// filament::Texture* load_texture(filament::Engine* io_engine, const
+// utils::Path& i_texture_path)
 //{
 //  if (i_texture_path.isEmpty() || !i_texture_path.exists())
 //    return nullptr;
@@ -66,12 +68,12 @@ static constexpr uint8_t TRANSPARENTCOLOR_PACKAGE[] = {
 //                    .format(filament::driver::TextureFormat::SRGB8)
 //                    .build(*io_engine);
 //
-//  
+//
 //  filament::Texture::PixelBufferDescriptor buffer(
-//      image_data.release(), 
-//      n_data, 
-//      filament::Texture::Format::RGB, 
-//      filament::Texture::Type::UBYTE, 
+//      image_data.release(),
+//      n_data,
+//      filament::Texture::Format::RGB,
+//      filament::Texture::Type::UBYTE,
 //      [](void* data, size_t, void*)
 //      {
 //        typename decltype(image_data)::deleter_type {}(
@@ -83,7 +85,15 @@ static constexpr uint8_t TRANSPARENTCOLOR_PACKAGE[] = {
 //  return texture;
 //}
 
-filament::Texture* load_ktx(filament::Engine* io_engine, const utils::Path& i_texture_path, image::KtxBundle** io_ktx_image = nullptr)
+template <typename T>
+constexpr T pi() noexcept
+{
+  return std::atan(1.0) * 4.0;
+}
+
+filament::Texture* load_ktx(filament::Engine* io_engine,
+                            const utils::Path& i_texture_path,
+                            image::KtxBundle** io_ktx_image = nullptr)
 {
   if (i_texture_path.isEmpty() || !i_texture_path.exists())
     return nullptr;
@@ -91,7 +101,7 @@ filament::Texture* load_ktx(filament::Engine* io_engine, const utils::Path& i_te
   std::ifstream file(i_texture_path.getPath(), std::ios::binary);
   std::vector<uint8_t> contents((std::istreambuf_iterator<char>(file)), {});
   auto ktx_image = new image::KtxBundle(contents.data(), contents.size());
-  if (io_ktx_image) 
+  if (io_ktx_image)
     *io_ktx_image = ktx_image;
   return image::KtxUtility::createTexture(io_engine, ktx_image, false, true);
 }
@@ -118,6 +128,72 @@ public:
   {
   }
 
+  flm::float2 trackball_coordinate(flm::float2 i_spherical_pos,
+                                   const flm::float2& i_track_velocity,
+                                   const float i_damping) noexcept
+  {
+    i_spherical_pos += i_track_velocity * i_damping;
+    i_spherical_pos.x = std::fmod(i_spherical_pos.x, 2.f * pi<float>());
+    static constexpr float epsilon = 0.1f;
+    static constexpr float half_pi = pi<float>() * 0.5f - epsilon;
+    i_spherical_pos.y = flm::clamp(i_spherical_pos.y, -half_pi, half_pi);
+    return i_spherical_pos;
+  }
+
+  filament::math::quatf
+  fast_trackball_rotation(filament::math::float2 i_spherical_position)
+  {
+    // Half the angles
+    i_spherical_position *= 0.5f;
+    namespace flm = filament::math;
+    // We know that yaw will rotate around the Y axis, and pitch around the Z
+    // So we can store simply two floats rather than an entire quaternion for
+    // each of the two#
+    // a.x === q.y, a.y === q.w
+    // b.x === p.x, b.y === p.w
+    const flm::float2 a{flm::fast::sin(i_spherical_position.x),
+                        flm::fast::cos(i_spherical_position.x)};
+    const flm::float2 b{flm::fast::sin(i_spherical_position.y),
+                        flm::fast::cos(i_spherical_position.y)};
+    // Using the above mapping, we can simplify the hammilton product to
+    // -(q.y * p.x) + i(q.w * p.w) + j(q.w * p.x) + k(q.y * p.w)
+    // \_________/    \_______________________________________/
+    //      |                             |
+    //     real                       imaginary
+    // We now only have 4 fast trig calls and 4 multiplies so roughly ~40 cycles
+    return {a.y * b.y, a.y * b.x, a.x * b.y, -(a.x) * b.x};
+  }
+
+  virtual void mouseMoveEvent(QMouseEvent* i_mouse_event) override
+  {
+    static flm::float2 spherical_position(0.f);
+    static flm::float2 mouse_position(0.f);
+    static float sensitivity = 0.01f;
+    static float radius = 4.f;
+    const flm::float3 camera_origin(0.f, 0.f, radius);
+    const flm::float3 target(0.f);
+
+    // Get the new mouse position
+    flm::float2 new_mouse_position(i_mouse_event->x(), i_mouse_event->y());
+    // Calculate the new spherical coordinate of the camera, from the mouse
+    // velocity vector, the current position and a damping factor
+    spherical_position = trackball_coordinate(
+      spherical_position, mouse_position - new_mouse_position, sensitivity);
+    // Store the new mouse position
+    mouse_position = std::move(new_mouse_position);
+    // We use Y as the up direction
+    constexpr flm::float3 up(0.f, 1.f, 0.f);
+    // Calculate the rotation from our cameras origin, around the target to the
+    // new position
+    auto rotation = fast_trackball_rotation(spherical_position);
+    // Calculate the new position by rotating the camera origin position vector
+    auto eye = target - (rotation * (target - camera_origin));
+    // Recalculate the view matrix
+    m_camera->lookAt(eye, target, up);
+    // Redraw the scene now that we've moved the camera
+    request_draw();
+  }
+
 private:
   virtual void init_impl(void* io_native_window) override
   {
@@ -130,14 +206,15 @@ private:
     m_view->setScene(m_scene.get());
 
     // Set up the render view point
-    setup_camera();
+    setup_camera_view();
+    setup_camera_projection();
 
     // Screen space effects
     m_view->setClearColor({0.1f, 0.125f, 0.25f, 1.0f});
-    m_view->setPostProcessingEnabled(false);
-    m_view->setDepthPrepass(fl::View::DepthPrepass::DISABLED);
+    m_view->setDepthPrepass(fl::View::DepthPrepass::ENABLED);
 
-    m_ibl_skybox.load_ibl("assets/env/pillars/pillars_ibl.ktx", "assets/env/pillars/pillars_skybox.ktx");
+    m_ibl_skybox.load_ibl("assets/env/pillars/pillars_ibl.ktx",
+                          "assets/env/pillars/pillars_skybox.ktx");
     m_scene->setSkybox(m_ibl_skybox.m_skybox.get());
     m_scene->setIndirectLight(m_ibl_skybox.m_indirect_light.get());
 
@@ -146,9 +223,10 @@ private:
         .package((void*)AIDEFAULTMAT_PACKAGE, sizeof(AIDEFAULTMAT_PACKAGE))
         .build(*m_engine));
     m_material_instance.reset(m_material->createInstance());
-    m_material_instance->setParameter("baseColor", filament::RgbType::LINEAR, flm::float3{0.8f});
+    m_material_instance->setParameter(
+      "baseColor", filament::RgbType::LINEAR, flm::float3{0.1f, 0.4f, 0.9f});
     m_material_instance->setParameter("metallic", 1.0f);
-    m_material_instance->setParameter("roughness", 0.4f);
+    m_material_instance->setParameter("roughness", 0.3f);
     m_material_instance->setParameter("reflectance", 0.5f);
     m_material_registry["DefaultMaterial"] = m_material_instance.get();
 
@@ -173,7 +251,16 @@ private:
     m_scene->addEntity(m_light);
   }
 
-  void setup_camera()
+  void setup_camera_view()
+  {
+    // setup view matrix
+    const flm::float3 eye(0.f, 0.f, 4.f);
+    const flm::float3 target(0.f);
+    const flm::float3 up(0.f, 1.f, 0.f);
+    m_camera->lookAt(eye, target, up);
+  }
+
+  void setup_camera_projection()
   {
     // Get the width and height of our window, scaled by the pixel ratio
     const auto pixel_ratio = devicePixelRatio();
@@ -183,17 +270,12 @@ private:
     // Set our view-port size
     m_view->setViewport({0, 0, w, h});
 
-    // setup view matrix
-    const flm::float3 eye(0.f, 0.f, 4.f);
-    const flm::float3 target(0.f);
-    const flm::float3 up(0.f, 1.f, 0.f);
-    m_camera->lookAt(eye, target, up);
-
     // setup projection matrix
     const float far = 50.f;
     const float near = 0.1f;
     const float aspect = float(w) / h;
-    m_camera->setProjection(45.0f, aspect, near, far, filament::Camera::Fov::VERTICAL);
+    m_camera->setProjection(
+      45.0f, aspect, near, far, filament::Camera::Fov::VERTICAL);
   }
 
   virtual void resize_impl() override
@@ -203,7 +285,7 @@ private:
       return;
     NativeWindowWidget::resize_impl();
     // Recalculate our camera matrices
-    setup_camera();
+    setup_camera_projection();
   }
 
   virtual void draw_impl() override
@@ -244,11 +326,9 @@ private:
   FilamentScopedEntity m_mesh;
   filamesh::MeshReader::MaterialRegistry m_material_registry;
 
-
-
   struct IBL
   {
-    IBL(const std::shared_ptr<filament::Engine>& i_engine) 
+    IBL(const std::shared_ptr<filament::Engine>& i_engine)
       : m_engine(i_engine)
       , m_ibl_texture(nullptr, {i_engine})
       , m_indirect_light(nullptr, {i_engine})
@@ -258,28 +338,29 @@ private:
     {
     }
 
-    void load_ibl(const utils::Path& i_ibl_path, const utils::Path& i_skybox_path)
+    void load_ibl(const utils::Path& i_ibl_path,
+                  const utils::Path& i_skybox_path)
     {
       image::KtxBundle* ibl_ktx = nullptr;
       m_ibl_texture.reset(load_ktx(m_engine.get(), i_ibl_path, &ibl_ktx));
       m_skybox_texture.reset(load_ktx(m_engine.get(), i_skybox_path));
 
       std::istringstream shstring(ibl_ktx->getMetadata("sh"));
-      for (auto& band : m_ibl_bands) 
+      for (auto& band : m_ibl_bands)
       {
         shstring >> band.x >> band.y >> band.z;
       }
 
       m_indirect_light.reset(filament::IndirectLight::Builder()
-            .reflections(m_ibl_texture.get())
-            .irradiance(3, m_ibl_bands.data())
-            .intensity(30000.0f)
-            .build(*m_engine));
+                               .reflections(m_ibl_texture.get())
+                               .irradiance(3, m_ibl_bands.data())
+                               .intensity(30000.0f)
+                               .build(*m_engine));
 
       m_skybox.reset(filament::Skybox::Builder()
-        .environment(m_skybox_texture.get())
-        .showSun(true)
-        .build(*m_engine));
+                       .environment(m_skybox_texture.get())
+                       .showSun(true)
+                       .build(*m_engine));
     }
 
     std::shared_ptr<filament::Engine> m_engine;

@@ -104,7 +104,7 @@ void Cube::map_frustum(const filament::math::mat4& i_transform)
 
 void Cube::map_aabb(const filament::Box& i_box)
 {
-    mat4 p = mat4::translate(i_box.center) * mat4::scale(i_box.halfExtent);
+    mat4 p = mat4::translation(i_box.center) * mat4::scaling(i_box.halfExtent);
     return map_frustum(p);
 }
 

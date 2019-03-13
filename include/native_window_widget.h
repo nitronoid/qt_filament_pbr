@@ -33,10 +33,10 @@ protected:
   virtual void resize_impl();
   // For derived classes to run initialization procedures
   virtual void init_impl(void* io_native_window);
-
-private:
   // Call this function to request a redraw of the window
   void request_draw();
+
+private:
   // This event will simply request a draw
   virtual void paintEvent(QPaintEvent* i_paint_event) override final;
   // This event will simply delegate to resize_impl after boilerplate check,

@@ -43,7 +43,7 @@ SOURCES += $$files(src/*.cpp, true)
 
 FORMS += ui/applayout.ui
 
-LIBS += -lOpenImageIO
+#LIBS += -lOpenImageIO
 LIBS += -L${FILAMENT_PATH}/lib/x86_64
 LIBS += \
   -lfilament \
@@ -53,7 +53,7 @@ LIBS += \
   -lfilaflat \
   -lutils \
   -limage \
-#  -lgeometry \
+  -lgeometry \
   -lsmol-v \
   -lassimp \
   -lfilameshio \
@@ -67,6 +67,6 @@ macx:{
     QMAKE_LFLAGS += -framework Metal -framework MetalKit -framework Cocoa -framework CoreFoundation -fobjc-link-runtime
 }
 
-QMAKE_CXXFLAGS += -Ofast -msse -msse2 -msse3 -march=native -funroll-loops 
+QMAKE_CXXFLAGS += -Ofast -msse -msse2 -msse3 -march=native -ffast-math -funroll-loops 
 QMAKE_CXXFLAGS += -Wall -Wextra -fdiagnostics-color
 
