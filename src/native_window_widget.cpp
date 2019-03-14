@@ -82,8 +82,8 @@ void NativeWindowWidget::init()
   static std::once_flag is_init;
   std::call_once(is_init, [this] {
     m_is_init = true;
-    auto native_window_id = winId();
-    init_impl((void*)native_window_id);
+    std::intptr_t native_window_id = winId();
+    init_impl(reinterpret_cast<void*>(native_window_id));
   });
 }
 
