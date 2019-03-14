@@ -25,6 +25,12 @@ private:
 
   void calculate_camera_projection();
 
+  void init_materials();
+
+  void init_meshes();
+
+  void init_lighting();
+
   virtual void init_impl(void* io_native_window) override;
 
   virtual void resize_impl() override;
