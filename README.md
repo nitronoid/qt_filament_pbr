@@ -25,7 +25,7 @@ The `EnvironmentMap` class depends on the two ktx files in assets/env/pillars ho
 
 ## Result
 <p align="center">
-<img src="https://i.imgur.com/BedXVmS.gif" width="800">
+<img src="assets/readme/qtpbrdemo.gif" width="500">
 </p>
 
 
