@@ -31,6 +31,16 @@ CONFIG -= app_bundle
 
 DEFINES += QT_DEPRECATED_WARNINGS
 
+DEPPATH = $${PWD}/dep
+DEPS = $$system(ls $${DEPPATH})
+!isEmpty(DEPS) {
+  for(d, DEPS) {
+    INCLUDEPATH += $${DEPPATH}/$${d}
+    INCLUDEPATH += $${DEPPATH}/$${d}/include
+  }
+}
+
+
 INCLUDEPATH += \
     $$PWD/include \
     $$PWD/ui \
@@ -53,7 +63,7 @@ LIBS += \
   -lfilaflat \
   -lutils \
   -limage \
-#  -lgeometry \
+  -lgeometry \
   -lsmol-v \
   -lassimp \
   -lfilameshio \

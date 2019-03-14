@@ -39,8 +39,8 @@ void NativeWindowWidget::resizeEvent(QResizeEvent* i_resize_event)
   const auto old_size = i_resize_event->oldSize();
   const auto size = i_resize_event->size();
 
-  // Don't resize to invalid negative dimensions
-  if (size.width() < 0 || size.height() < 0)
+  // Don't resize to invalid negative dimensions, or we haven't initialized
+  if (size.width() < 0 || size.height() < 0 || !m_is_init)
     return;
 
   resize_impl();

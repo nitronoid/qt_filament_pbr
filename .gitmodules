@@ -1,0 +1,3 @@
+[submodule "dep/value-ptr-lite"]
+	path = dep/value-ptr-lite
+	url = git@github.com:nitronoid/value-ptr-lite.git
