@@ -1,12 +1,6 @@
 #include <QApplication>
-#include <QSurfaceFormat>
-
 #include "app_window.h"
 #include "filament_window_widget.h"
-
-// To reduce the verbosity of filament code
-namespace fl = filament;
-namespace flm = filament::math;
 
 // filament::Texture* load_texture(filament::Engine* io_engine, const
 // utils::Path& i_texture_path)
@@ -61,7 +55,6 @@ int main(int argc, char* argv[])
   QApplication app(argc, argv);
   // Create a new main window
   AppWindow window;
-
   // Set the back-end we want filament to use for rendering
   auto filament_backend = filament::Engine::Backend::OPENGL;
   // Create our filament engine
